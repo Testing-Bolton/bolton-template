@@ -1,14 +1,11 @@
 name: Basic Security Notification
 
-# 1. Il trigger ignora a monte i push che contengono SOLO questi file
+# Rimosso paths-ignore per evitare il bug di GitHub al primo commit.
+# Il controllo viene gestito in modo sicuro dallo step di Guardia interno.
 on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.github/**'
-      - '.bolton/**'
-      - 'README*.md'
 
 jobs:
   notify-business:
