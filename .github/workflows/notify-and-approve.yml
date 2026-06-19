@@ -1,0 +1,82 @@
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  check-first-run:
+    runs-on: ubuntu-latest
+    outputs:
+      is_first_run: ${{ steps.check.outputs.first_run }}
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check if this is first run
+        id: check
+        run: |
+          if [ -f ".github/.approved" ]; then
+            echo "first_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "first_run=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: MS Teams notification
+        if: ${{ steps.check.outputs.first_run == 'true' }}
+        uses: jdcargile/ms-teams-notification@v1.4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
+          notification-color: 'ffc107'
+          notification-summary: |
+            New repository: ${{ github.repository }} requires approval. \n\n
+            Approve here: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          
+  setup-environment:
+    needs: check-first-run
+    runs-on: ubuntu-latest
+    if: ${{ needs.check-first-run.outputs.is_first_run == 'true'}}
+    
+    steps:
+      - name: Add reviewer team to repo
+        run: |
+          curl -L \
+          -X PUT \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ secrets.ORG_ADMIN_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2026-03-10" \
+          https://api.github.com/orgs/${{ github.repository_owner }}/teams/repo-approvers/repos/${{ github.repository }} \
+          -d '{"permission":"push"}'
+
+
+      - name: Create business-approval environment 
+        run:  |
+          curl --fail -L \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.ORG_ADMIN_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            https://api.github.com/repos/${{ github.repository }}/environments/business-approval \
+            -d '{"reviewers": [{"type":"Team","id":18093411}]}'
+        #-d '{"reviewers": [{"type":"User","id":280656711}]}'
+
+
+  approve-and-initialize:
+    needs: [check-first-run, setup-environment]
+    runs-on: ubuntu-latest
+    environment: business-approval
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create initialization marker
+        run: |
+          echo "Repository approved by Business Team on $(date)" > .github/.approved
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/.approved
+          git commit -m "repository marked as approved [skip ci]"
+          git push
