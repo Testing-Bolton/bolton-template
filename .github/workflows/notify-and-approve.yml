@@ -29,7 +29,8 @@ jobs:
     - id: check
       run: |
         FILES=$(find . -type f \
-        -not -path "./.github/*" \
+        -not -path "./.git/*" \
+        -not -path "./.github/*")
         if [ -n "$FILES" ]; then
         echo "proceed=true" >> "$GITHUB_OUTPUT"
         else
