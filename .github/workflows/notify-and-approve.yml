@@ -1,7 +1,7 @@
 name: Basic Security Notification
 
-# Rimosso paths-ignore per evitare il bug di GitHub al primo commit.
-# Il controllo viene gestito in modo sicuro dallo step di Guardia interno.
+# Removed paths-ignore to avoid GitHub parser bugs on the initial commit.
+# The check is safely handled by the internal Guard step below.
 on:
   push:
     branches:
@@ -9,28 +9,28 @@ on:
 
 jobs:
   notify-business:
-    name: Invia Notifica Teams
+    name: Send Teams Notification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. LA GUARDIA: Controlla fisicamente il contenuto della cartella
-      - name: Controlla se c'è codice vero
+      # 2. THE GUARD: Physically check the folder content
+      - name: Check for actual application code
         id: guard
         run: |
-          # Cerca i file, ma IGNORA tutto ciò che è cartella di sistema (.git, .github) o README
+          # Find files, but IGNORE system folders (.git, .github, .bolton) and READMEs
           FILES=$(find . -type f -not -path "*/\.git/*" -not -path "*/\.github/*" -not -path "*/\.bolton/*" -not -name "README*.md")
           
           if [ -z "$FILES" ]; then
-            echo "Nessun codice applicativo trovato (creazione repo da template). Mi fermo."
+            echo "No application code found (likely repo creation from template). Stopping here."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Codice applicativo trovato. Procediamo con la notifica."
+            echo "Application code found. Proceeding with the notification."
             echo "proceed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # 3. Invia la notifica SOLO se la guardia ha trovato file applicativi
+      # 3. Send the notification ONLY if the guard found application files
       - name: Send notification to Teams
         if: steps.guard.outputs.proceed == 'true'
         shell: bash
@@ -39,12 +39,12 @@ jobs:
           REPO: ${{ github.repository }}
           SERVER: ${{ github.server_url }}
         run: |
-          # Costruisce l'URL diretto alla tab Security della repository creata
+          # Build the direct URL to the repository's Security tab
           SECURITY_URL="${SERVER}/${REPO}/security"
           
-          SUMMARY="È stato caricato nuovo codice nel repository **${REPO}**.<br><br>👉 [Vai alla dashboard di Security per i controlli](${SECURITY_URL})"
+          SUMMARY="New code has been pushed to the **${REPO}** repository.<br><br>👉 [Go to the Security dashboard to review](${SECURITY_URL})"
           
-          echo "Invio notifica a Teams..."
+          echo "Sending Teams notification..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "${WEBHOOK}" \
             -H "Content-Type: application/json" \
@@ -52,12 +52,12 @@ jobs:
               \"@type\": \"MessageCard\",
               \"@context\": \"http://schema.org/extensions\",
               \"themeColor\": \"0076D7\",
-              \"summary\": \"Nuovo caricamento codice\",
+              \"summary\": \"New code pushed\",
               \"text\": \"${SUMMARY}\"
             }")
           
-          echo "Risposta Teams: HTTP ${HTTP_CODE}"
+          echo "Teams response: HTTP ${HTTP_CODE}"
           if [ "${HTTP_CODE}" -ge 400 ]; then
-            echo "::error::Notifica Teams non riuscita (HTTP ${HTTP_CODE}). Controlla il Webhook URI."
+            echo "::error::Teams notification failed (HTTP ${HTTP_CODE}). Check the Webhook URI."
             exit 1
           fi
